@@ -23,6 +23,7 @@ import {
   ghidraSeedLimitations,
 } from "./GhidraAnalysisSeeds.js";
 import {
+  ghidraEffectiveLanguageOverride,
   ghidraPinnedLanguage,
   ghidraProfileDisabledAnalyzers,
   ghidraProfileLanguageOverride,
@@ -94,6 +95,10 @@ import {
   ghidraRiscvCallingConventionLimitations,
   ghidraRiscvLimitations,
 } from "./GhidraRiscvProfile.js";
+import {
+  ghidraXtensaLimitations,
+  ghidraXtensaProfileMismatchReason,
+} from "./GhidraXtensaProfile.js";
 import { ghidraPePdbLimitations } from "./GhidraPeProfile.js";
 import { unverifiedGhidraBuildLimitation } from "./GhidraReleasePolicy.js";
 import { GhidraHeadlessLauncher } from "./GhidraLauncher.js";
@@ -309,7 +314,8 @@ export const createGhidraProviderClient = (input: {
   if (
     !sameGhidraLanguageOverride(
       parameterLanguage,
-      config.ghidraLanguageOverride ?? targetLanguage,
+      ghidraEffectiveLanguageOverride(target, config.ghidraLanguageOverride) ??
+        targetLanguage,
     )
   )
     return err(
@@ -330,6 +336,16 @@ export const createGhidraProviderClient = (input: {
     return err(
       new ProviderAdapterError("ghidra", "open_binary", {
         diagnostics: { reason: mipsProfileMismatch },
+      }),
+    );
+  const xtensaProfileMismatch = ghidraXtensaProfileMismatchReason(
+    target,
+    committedProfile.parameters,
+  );
+  if (xtensaProfileMismatch !== null)
+    return err(
+      new ProviderAdapterError("ghidra", "open_binary", {
+        diagnostics: { reason: xtensaProfileMismatch },
       }),
     );
   const importLanguage = parameterLanguage;
@@ -418,6 +434,7 @@ export const createGhidraProviderClient = (input: {
     ...ghidraMipsRelocatableLimitations(target),
     ...ghidraMipsSharedLimitations(target),
     ...ghidraRiscvLimitations(target),
+    ...ghidraXtensaLimitations(target),
   ];
   const providerLimitations =
     installation.platform === "win32"
