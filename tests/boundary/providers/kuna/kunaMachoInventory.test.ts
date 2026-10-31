@@ -1,6 +1,13 @@
 import { expect, it as test } from "vitest";
 
 import { functionDossierSchema } from "../../../../src/domain/native/functionDossier.js";
+import { projectAnalysisError } from "../../../../src/domain/analysisErrorProjection.js";
+import {
+  ambiguousKunaNameMessage,
+  KUNA_XREF_AMBIGUOUS_NAME_REMEDIATION,
+  KUNA_XREF_MISSING_NAME_REMEDIATION,
+  missingKunaXrefNameMessage,
+} from "../../../../src/kuna/KunaSelectorGuidance.js";
 import { fakeKunaCalls } from "./fakeKuna.js";
 import {
   MACHO_FUNCTIONS,
@@ -160,6 +167,43 @@ it("resolves a data symbol's name for xrefs, which accept data addresses", async
     expect(
       (await fakeKunaCalls(kuna)).find(({ argv }) => argv[0] === "xrefs")?.argv,
     ).toContain("0x100008000");
+  } finally {
+    expect(await client.close()).toEqual({ ok: true, value: null });
+  }
+});
+
+it("reports missing and ambiguous xref names within Kuna's inventory", async () => {
+  const { open } = await machoSession("rea-kuna-macho-xref-recovery-");
+  const client = open();
+  try {
+    const missing = await client.execute("xrefs", { address: "missing_data" });
+    expect(missing.ok).toBe(false);
+    if (missing.ok) throw new Error("Expected missing inventory name");
+    expect(projectAnalysisError(missing.error)).toMatchObject({
+      code: "invalid_request",
+      message: missingKunaXrefNameMessage("missing_data"),
+      remediation: { action: KUNA_XREF_MISSING_NAME_REMEDIATION },
+    });
+    expect(projectAnalysisError(missing.error).recovery).toBeUndefined();
+    expect(projectAnalysisError(missing.error).message).toContain(
+      "missing_data",
+    );
+
+    const ambiguous = await client.execute("xrefs", { address: "puts" });
+    expect(ambiguous.ok).toBe(false);
+    if (ambiguous.ok) throw new Error("Expected ambiguous inventory name");
+    expect(projectAnalysisError(ambiguous.error)).toMatchObject({
+      code: "invalid_request",
+      message: ambiguousKunaNameMessage("puts", ["0x100000480", "0x100004000"]),
+      remediation: { action: KUNA_XREF_AMBIGUOUS_NAME_REMEDIATION },
+    });
+    expect(projectAnalysisError(ambiguous.error).message).toContain(
+      "0x100000480",
+    );
+    expect(projectAnalysisError(ambiguous.error).message).toContain(
+      "0x100004000",
+    );
+    expect(projectAnalysisError(ambiguous.error).recovery).toBeUndefined();
   } finally {
     expect(await client.close()).toEqual({ ok: true, value: null });
   }
